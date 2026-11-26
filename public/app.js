@@ -1538,7 +1538,7 @@ function renderBudgets() {
         className: `progress-bar ${cp > 100 ? 'danger' : cp >= S.alertThreshold ? 'warn' : ''}`,
         style: { width: `${cBar}%` },
       });
-      if (cp <= S.alertThreshold) innerBar.style.background = color;
+      if (cp < S.alertThreshold) innerBar.style.background = color;
       card.appendChild(makeEl('div', { className: 'progress-wrap', style: { height: '8px' } }, innerBar));
     }
     return card;

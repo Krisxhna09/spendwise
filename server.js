@@ -186,6 +186,10 @@ class SQLiteSessionStore extends session.Store {
 }
 
 // ── Validation & sanitization helpers ─────────────────────────────────────────
+function normalizeUserIdInput(s) {
+  return typeof s === 'string' ? s.normalize('NFC').trim() : '';
+}
+
 function validateUserId(s) {
   return typeof s === 'string' && /^[a-zA-Z0-9_]{3,30}$/.test(s);
 }
@@ -810,7 +814,7 @@ function createApp(options = {}) {
 
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const userId = sanitize(req.body?.userId, 30);
+      const userId = normalizeUserIdInput(req.body?.userId);
       const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
       if (!validateUserId(userId)) {
@@ -870,7 +874,7 @@ function createApp(options = {}) {
 
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const userId = sanitize(req.body?.userId, 30);
+      const userId = normalizeUserIdInput(req.body?.userId);
       const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
       if (!userId || !password) {

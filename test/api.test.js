@@ -124,11 +124,20 @@ test('security headers, strict script CSP, external JS, and zero inline handlers
   assert.equal(jsRes.status, 200);
   const jsBody = await jsRes.text();
   assert.equal(/innerHTML|outerHTML|insertAdjacentHTML|document\.write/i.test(jsBody), false);
+
+  // Public static directory must never contain SQLite database or WAL/SHM files
+  const publicFiles = fs.readdirSync(path.join(__dirname, '..', 'public'));
+  assert.equal(publicFiles.some(f => /\.db(?:-wal|-shm)?$/i.test(f)), false);
 });
 
-test('password rules reject spaces, special chars, and short passwords', async () => {
+test('user ID and password rules reject invalid IDs, spaces, special chars, and short passwords', async () => {
   const c = new TestClient(baseUrl);
-  const badPasswords = ['short1A', 'Pass word1', 'Pass@1234', 'Pass_1234', 'Pass-1234', 'Pass!1234', 'Пароль1234', ''];
+  const badUserIds = ['ab', 'bad user', 'bad-name', 'user@1', 'alice\x00', 'a'.repeat(31), ''];
+  for (const uid of badUserIds) {
+    const r = await c.req('POST', '/api/auth/register', { userId: uid, password: 'ValidPass123' });
+    assert.equal(r.status, 400);
+  }
+  const badPasswords = ['short1A', 'Pass word1', 'Pass@1234', 'Pass_1234', 'Pass-1234', 'Pass!1234', 'Пароль1234', 'a'.repeat(73), ''];
   for (const pw of badPasswords) {
     const r = await c.req('POST', '/api/auth/register', { userId: 'ruleuser', password: pw });
     assert.equal(r.status, 400);
@@ -140,6 +149,11 @@ test('registration, unique user ID, bcrypt hashing, and INR-only enforcement', a
   const r1 = await c.req('POST', '/api/auth/register', { userId: 'Aarav01', password: 'Alpha99Password' });
   assert.equal(r1.status, 201);
   assert.ok(r1.body.csrfToken);
+
+  const storedUser = db.prepare('SELECT password_hash FROM users WHERE user_id = ?').get('Aarav01');
+  assert.ok(storedUser);
+  assert.match(storedUser.password_hash, /^\$2[aby]\$12\$/);
+  assert.equal(bcrypt.compareSync('Alpha99Password', storedUser.password_hash), true);
 
   const s = await c.req('GET', '/api/settings');
   assert.equal(s.status, 200);
@@ -239,6 +253,24 @@ test('INR CRUD in exact paise, stored text sanitization, search/filters/sorting,
   assert.equal(searchAmt.status, 200);
   assert.equal(searchAmt.body.length, 1);
   assert.equal(searchAmt.body[0].id, tx1.body.id);
+
+  // Own-user transaction update (PUT) and delete (DELETE)
+  const tempTx = await dev2.req('POST', '/api/transactions', {
+    type: 'expense', amount: '100.25', category: 'Transport', date: '2026-11-24', note: 'Auto rickshaw',
+  });
+  assert.equal(tempTx.status, 201);
+
+  const updTx = await dev2.req('PUT', `/api/transactions/${tempTx.body.id}`, {
+    amount: '150.75', category: 'Transport', note: '<b>Metro</b> pass', date: '2026-11-24',
+  });
+  assert.equal(updTx.status, 200);
+  assert.equal(updTx.body.transaction.amountPaise, 15075);
+  assert.equal(updTx.body.transaction.note, 'Metro pass');
+
+  const delTx = await dev2.req('DELETE', `/api/transactions/${tempTx.body.id}`);
+  assert.equal(delTx.status, 200);
+  const delAgain = await dev2.req('DELETE', `/api/transactions/${tempTx.body.id}`);
+  assert.equal(delAgain.status, 404);
 });
 
 test('malformed JSON, non-object bodies, and oversized payloads return JSON errors', async () => {
@@ -281,6 +313,28 @@ test('cross-user isolation, SQL injection resilience, and CSRF', async () => {
   const sqli = await priya.req('GET', "/api/transactions?q=' OR '1'='1&sortBy=amount;DROP TABLE users;--");
   assert.equal(sqli.status, 200);
   assert.equal(sqli.body.length, 0);
+
+  // CSRF protection: missing or mismatched X-CSRF-Token must be rejected with 403
+  const missingCsrf = await fetch(baseUrl + '/api/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: priya.cookie },
+    body: JSON.stringify({ type: 'expense', amount: '50.00', category: 'Other', date: '2026-11-26' }),
+  });
+  assert.equal(missingCsrf.status, 403);
+
+  const badCsrf = await fetch(baseUrl + '/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: priya.cookie, 'X-CSRF-Token': '0'.repeat(64) },
+    body: JSON.stringify({ period: 'weekly' }),
+  });
+  assert.equal(badCsrf.status, 403);
+
+  const badCatCsrf = await fetch(baseUrl + '/api/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: priya.cookie, 'X-CSRF-Token': 'invalid-token' },
+    body: JSON.stringify({ name: 'Books' }),
+  });
+  assert.equal(badCatCsrf.status, 403);
 });
 
 test('local import flags non-INR data for review instead of silently relabeling', async () => {
@@ -556,4 +610,103 @@ test('legacy pre-INR SQLite schema migrates safely and flags non-INR rows', asyn
   } finally {
     fs.rmSync(migDir, { recursive: true, force: true });
   }
+});
+
+test('categories CRUD, transaction filters/sorting, and LIKE wildcard escaping', async () => {
+  const kabir = new TestClient(baseUrl);
+  const reg = await kabir.req('POST', '/api/auth/register', { userId: 'Kabir03', password: 'KabirPass99' });
+  assert.equal(reg.status, 201);
+
+  assert.equal((await kabir.req('POST', '/api/categories', { name: '<script>x</script>' })).status, 400);
+  const cat = await kabir.req('POST', '/api/categories', { name: 'Chai & Snacks' });
+  assert.equal(cat.status, 201);
+  assert.equal(cat.body.name, 'Chai & Snacks');
+
+  const dupCat = await kabir.req('POST', '/api/categories', { name: 'chai & snacks' });
+  assert.equal(dupCat.status, 409);
+
+  assert.equal((await kabir.req('DELETE', '/api/categories/notanumber')).status, 400);
+
+  // Cross-user category deletion must fail with 404
+  const priya = new TestClient(baseUrl);
+  await priya.req('POST', '/api/auth/login', { userId: 'Priya02', password: 'PriyaPass99' });
+  assert.equal((await priya.req('DELETE', `/api/categories/${cat.body.id}`)).status, 404);
+
+  assert.equal((await kabir.req('DELETE', `/api/categories/${cat.body.id}`)).status, 200);
+  assert.equal((await kabir.req('DELETE', `/api/categories/${cat.body.id}`)).status, 404);
+
+  await kabir.req('POST', '/api/transactions', {
+    type: 'expense', amount: '500.00', category: 'Groceries', date: '2026-11-10', note: '50% discount',
+  });
+  await kabir.req('POST', '/api/transactions', {
+    type: 'expense', amount: '200.00', category: 'Transport', date: '2026-11-15', note: 'Cab_ride',
+  });
+  await kabir.req('POST', '/api/transactions', {
+    type: 'income', amount: '1000.00', category: 'Other', date: '2026-11-20', note: 'Freelance bonus',
+  });
+
+  assert.equal((await kabir.req('GET', '/api/transactions?type=bogus')).status, 400);
+  assert.equal((await kabir.req('GET', '/api/transactions?from=bad-date')).status, 400);
+  assert.equal((await kabir.req('GET', '/api/transactions?type=expense')).body.length, 2);
+  assert.equal((await kabir.req('GET', '/api/transactions?category=Groceries')).body.length, 1);
+
+  const dateWin = await kabir.req('GET', '/api/transactions?from=2026-11-12&to=2026-11-18');
+  assert.equal(dateWin.status, 200);
+  assert.equal(dateWin.body.length, 1);
+  assert.equal(dateWin.body[0].note, 'Cab_ride');
+
+  const asc = await kabir.req('GET', '/api/transactions?sortBy=amount&sortDir=asc');
+  assert.deepEqual(asc.body.map(t => t.amountPaise), [20000, 50000, 100000]);
+
+  const desc = await kabir.req('GET', '/api/transactions?sortBy=amount&sortDir=desc');
+  assert.deepEqual(desc.body.map(t => t.amountPaise), [100000, 50000, 20000]);
+
+  // % and _ in search query must be matched literally, not as SQL LIKE wildcards
+  const pctMatch = await kabir.req('GET', '/api/transactions?q=' + encodeURIComponent('50%'));
+  assert.equal(pctMatch.body.length, 1);
+  assert.equal(pctMatch.body[0].note, '50% discount');
+
+  const underscoreMatch = await kabir.req('GET', '/api/transactions?q=' + encodeURIComponent('Cab_ride'));
+  assert.equal(underscoreMatch.body.length, 1);
+  const underscoreNoWildcard = await kabir.req('GET', '/api/transactions?q=' + encodeURIComponent('CabXride'));
+  assert.equal(underscoreNoWildcard.body.length, 0);
+});
+
+test('logout and account deletion enforce CSRF, password check, and cascade cleanup', async () => {
+  const meera = new TestClient(baseUrl);
+  const reg = await meera.req('POST', '/api/auth/register', { userId: 'Meera03', password: 'MeeraPass99' });
+  assert.equal(reg.status, 201);
+
+  const tx = await meera.req('POST', '/api/transactions', {
+    type: 'expense', amount: '120.00', category: 'Food & Dining', date: '2026-11-26', note: 'Lunch',
+  });
+  assert.equal(tx.status, 201);
+
+  const logoutNoCsrf = await fetch(baseUrl + '/api/auth/logout', {
+    method: 'POST',
+    headers: { Cookie: meera.cookie },
+  });
+  assert.equal(logoutNoCsrf.status, 403);
+
+  const logoutBadCsrf = await fetch(baseUrl + '/api/auth/logout', {
+    method: 'POST',
+    headers: { Cookie: meera.cookie, 'X-CSRF-Token': 'bad-csrf-token' },
+  });
+  assert.equal(logoutBadCsrf.status, 403);
+
+  const logoutOk = await meera.req('POST', '/api/auth/logout');
+  assert.equal(logoutOk.status, 200);
+  assert.equal((await meera.req('GET', '/api/auth/me')).body.authenticated, false);
+
+  const relogin = await meera.req('POST', '/api/auth/login', { userId: 'Meera03', password: 'MeeraPass99' });
+  assert.equal(relogin.status, 200);
+
+  const wrongPwDel = await meera.req('DELETE', '/api/auth/account', { password: 'WrongPassword1' });
+  assert.equal(wrongPwDel.status, 403);
+
+  const delOk = await meera.req('DELETE', '/api/auth/account', { password: 'MeeraPass99' });
+  assert.equal(delOk.status, 200);
+  assert.equal((await meera.req('GET', '/api/auth/me')).body.authenticated, false);
+  assert.equal((await meera.req('POST', '/api/auth/login', { userId: 'Meera03', password: 'MeeraPass99' })).status, 401);
+  assert.equal(db.prepare('SELECT id FROM users WHERE user_id = ?').get('Meera03'), undefined);
 });
