@@ -1,0 +1,19 @@
+{
+  "name": "spendwise",
+  "version": "2.0.0",
+  "description": "Personal finance tracker — accounts, SQL storage, cross-device sync",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/api.test.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1"
+  }
+}

@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>SpendWise — Personal Finance (INR)</title>
+  <style>
+    /* ── Design Tokens ─────────────────────────────────────────── */
+    :root {
+      --bg: #0d1017;
+      --surface: #141925;
+      --card: #1a2030;
+      --card-elev: #20273b;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --accent: #6c8ef5;
+      --accent-dim: rgba(108, 142, 245, 0.16);
+      --accent-glow: rgba(108, 142, 245, 0.28);
+      --text: #edf0f7;
+      --muted: #98a2be;
+      --ok: #34c97a;
+      --warn: #f5a623;
+      --danger: #f05454;
+      --ok-bg: rgba(52, 201, 122, 0.14);
+      --warn-bg: rgba(245, 166, 35, 0.14);
+      --danger-bg: rgba(240, 84, 84, 0.14);
+      --r: 14px;
+      --rs: 10px;
+      --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+      min-height: 100%;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 99px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    .num { font-variant-numeric: tabular-nums; }
+
+    /* ── Global Loader ─────────────────────────────────────────── */
+    #global-loader {
+      position: fixed; inset: 0; background: var(--bg); z-index: 999;
+      display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+      padding: 20px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toasts ────────────────────────────────────────────────── */
+    #toasts {
+      position: fixed; top: 16px; right: 16px; z-index: 600;
+      display: flex; flex-direction: column; gap: 8px;
+      max-width: min(360px, calc(100vw - 32px));
+      pointer-events: none;
+    }
+    .toast {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 16px; border-radius: var(--rs);
+      font-size: 13px; font-weight: 500;
+      pointer-events: all; box-shadow: var(--shadow);
+      animation: slideIn 0.28s var(--ease);
+    }
+    .toast.ok { background: #162a21; border: 1px solid rgba(52, 201, 122, 0.4); color: var(--ok); }
+    .toast.error { background: #2d181a; border: 1px solid rgba(240, 84, 84, 0.4); color: var(--danger); }
+    .toast.info { background: var(--card-elev); border: 1px solid var(--border-strong); color: var(--text); }
+    .toast-close {
+      margin-left: auto; cursor: pointer; background: none; border: none;
+      color: inherit; opacity: 0.7; font-size: 16px; line-height: 1; padding: 2px 4px;
+    }
+    @keyframes slideIn { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* ── Auth & Setup Screens ──────────────────────────────────── */
+    .full-screen-center {
+      position: fixed; inset: 0; background: var(--bg); z-index: 300;
+      display: none; align-items: center; justify-content: center;
+      padding: 16px; overflow-y: auto;
+    }
+    .auth-box, .setup-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: var(--shadow);
+      margin: auto;
+    }
+    .auth-box { max-width: 410px; }
+    .auth-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .logo-icon {
+      width: 36px; height: 36px; background: var(--accent); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; flex-shrink: 0;
+    }
+    .auth-tabs {
+      display: grid; grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border); border-radius: var(--rs);
+      overflow: hidden; margin-bottom: 22px;
+    }
+    .auth-tab {
+      min-height: 44px; padding: 10px; text-align: center; font-size: 14px; font-weight: 600;
+      cursor: pointer; border: none; background: transparent; color: var(--muted); transition: all 0.15s;
+    }
+    .auth-tab.active { background: var(--accent-dim); color: var(--accent); }
+    .auth-panel { display: none; }
+    .auth-panel.active { display: block; }
+    .field-hint { font-size: 12px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+    .field-hint.ok { color: var(--ok); }
+    .field-hint.bad { color: var(--danger); }
+
+    /* Setup Wizard (4 steps — INR only) */
+    .step-dots { display: flex; gap: 6px; margin-bottom: 24px; }
+    .step-dot { height: 4px; border-radius: 99px; background: var(--border); flex: 1; transition: background 0.3s var(--ease); }
+    .step-dot.done { background: var(--accent); }
+    .setup-step { display: none; }
+    .setup-step.active { display: block; }
+    .setup-title { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .setup-sub { font-size: 14px; color: var(--muted); margin-bottom: 20px; }
+    .setup-nav { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 22px; }
+
+    /* ── Main App Shell ────────────────────────────────────────── */
+    #app { display: none; min-height: 100dvh; position: relative; }
+    #sidebar {
+      width: 230px; flex-shrink: 0; background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+    }
+    .sidebar-logo { padding: 20px 18px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+    .logo-text { font-size: 17px; font-weight: 800; letter-spacing: -0.025em; }
+    .user-chip {
+      font-size: 12px; color: var(--muted); padding: 10px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .user-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-list { padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; min-height: 42px;
+      padding: 10px 12px; border-radius: var(--rs); cursor: pointer;
+      color: var(--muted); font-size: 14px; font-weight: 500;
+      transition: all 0.16s; border: none; background: none; width: 100%; text-align: left;
+    }
+    .nav-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+    .nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+    .sidebar-footer { padding: 12px 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+
+    #main { margin-left: 230px; display: flex; flex-direction: column; min-height: 100dvh; min-width: 0; }
+    #topbar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      position: sticky; top: 0; z-index: 40;
+    }
+    .topbar-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    #mobile-account-pill { display: none; }
+    #content { padding: 24px; flex: 1; max-width: 1120px; width: 100%; }
+
+    /* Bottom Navigation (Mobile) */
+    #bottom-nav {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 6px 4px max(6px, env(safe-area-inset-bottom)); z-index: 50;
+      justify-content: space-around;
+    }
+    .bnav-item {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+      padding: 6px 4px; border-radius: var(--rs); cursor: pointer;
+      color: var(--muted); font-size: 10.5px; font-weight: 500;
+      border: none; background: none; flex: 1; min-width: 0; min-height: 46px;
+      transition: color 0.15s;
+    }
+    .bnav-item.active { color: var(--accent); font-weight: 600; }
+    .bnav-item svg { width: 20px; height: 20px; }
+    .bnav-add {
+      display: flex; align-items: center; justify-content: center;
+      width: 44px; height: 40px; border-radius: 12px;
+      background: var(--accent); color: #fff; border: none; font-size: 22px; font-weight: 600;
+      cursor: pointer; box-shadow: 0 2px 12px var(--accent-glow); flex-shrink: 0;
+      align-self: center; margin: 0 4px;
+      transition: transform 0.16s var(--ease);
+    }
+    .bnav-add:hover { filter: brightness(1.1); }
+    .bnav-add:active { transform: scale(0.95); }
+
+    /* ── Alert & Currency Review Banners ───────────────────────── */
+    #alert-banner, #review-banner {
+      display: flex; flex-direction: column; gap: 10px;
+      margin-bottom: 16px;
+    }
+    #alert-banner:empty, #review-banner:empty { display: none; margin-bottom: 0; }
+    .alert-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: var(--warn-bg); border: 1px solid rgba(245, 166, 35, 0.35);
+      color: var(--text); border-radius: var(--r);
+      padding: 14px 16px; animation: slideIn 0.3s var(--ease);
+    }
+    .alert-item.danger { background: var(--danger-bg); border-color: rgba(240, 84, 84, 0.38); }
+    .alert-item.info { background: var(--accent-dim); border-color: rgba(108, 142, 245, 0.38); }
+    .alert-icon {
+      width: 30px; height: 30px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; flex-shrink: 0;
+      background: rgba(245, 166, 35, 0.2); color: var(--warn);
+    }
+    .alert-item.danger .alert-icon { background: rgba(240, 84, 84, 0.22); color: var(--danger); }
+    .alert-item.info .alert-icon { background: rgba(108, 142, 245, 0.24); color: var(--accent); }
+    .alert-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+    .alert-link {
+      background: none; border: none; color: var(--accent); font-weight: 600; font-size: 13px;
+      cursor: pointer; padding: 2px 0; text-decoration: underline;
+    }
+    .alert-close {
+      margin-left: auto; cursor: pointer; background: none; border: none;
+      color: var(--muted); font-size: 18px; line-height: 1; padding: 4px; flex-shrink: 0;
+    }
+    .alert-close:hover { color: var(--text); }
+
+    /* ── Shared Components ─────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 42px; padding: 10px 16px; border-radius: var(--rs);
+      font-size: 14px; font-weight: 600; cursor: pointer; border: none;
+      transition: all 0.18s var(--ease); white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 12px var(--accent-glow); }
+    .btn-primary:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-ghost { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+    .btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(240, 84, 84, 0.25); }
+    .btn-danger:hover:not(:disabled) { background: rgba(240, 84, 84, 0.22); }
+    .btn-sm { min-height: 36px; padding: 7px 12px; font-size: 13px; }
+    .btn-icon {
+      width: 38px; height: 38px; min-height: 38px; padding: 0;
+      border-radius: var(--rs); background: rgba(255, 255, 255, 0.06); color: var(--muted);
+    }
+    .btn-icon:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; }
+    .card-sm { padding: 14px 16px; }
+    .card-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 600;
+    }
+    .badge-ok { background: var(--ok-bg); color: var(--ok); }
+    .badge-warn { background: var(--warn-bg); color: var(--warn); }
+    .badge-danger { background: var(--danger-bg); color: var(--danger); }
+    .badge-info { background: var(--accent-dim); color: var(--accent); }
+
+    .progress-wrap { background: rgba(255, 255, 255, 0.09); border-radius: 99px; overflow: hidden; }
+    .progress-bar { height: 100%; border-radius: 99px; transition: width 0.5s var(--ease); background: var(--accent); }
+    .progress-bar.warn { background: var(--warn); }
+    .progress-bar.danger { background: var(--danger); }
+
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    label.field-label { font-size: 13px; font-weight: 500; color: var(--muted); }
+    .field-input {
+      background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-strong);
+      border-radius: var(--rs); color: var(--text); font-size: 15px;
+      min-height: 44px; padding: 10px 14px; width: 100%; outline: none;
+      transition: border-color 0.15s; -webkit-appearance: none;
+    }
+    .field-input:focus { border-color: var(--accent); }
+    .field-input::placeholder { color: var(--muted); opacity: 0.7; }
+    .field-input.err { border-color: var(--danger); }
+    select.field-input { cursor: pointer; background-color: #161b29; }
+    .err-msg {
+      font-size: 13px; color: var(--danger); background: var(--danger-bg);
+      border: 1px solid rgba(240, 84, 84, 0.3); border-radius: var(--rs);
+      padding: 10px 12px; display: none;
+    }
+    .err-msg.show { display: block; }
+
+    .pw-wrap { position: relative; }
+    .pw-wrap .field-input { padding-right: 64px; }
+    .pw-toggle {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.07); border: none; color: var(--muted);
+      font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+    }
+    .pw-toggle:hover { color: var(--text); }
+
+    .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .toggle-btn {
+      min-height: 42px; padding: 8px 14px; border-radius: var(--rs);
+      border: 1px solid var(--border-strong); background: transparent;
+      color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    }
+    .toggle-btn.active, .toggle-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      min-height: 36px; padding: 6px 12px; border-radius: 99px;
+      font-size: 13px; font-weight: 500;
+      background: rgba(255, 255, 255, 0.07); color: var(--muted);
+      border: 1px solid transparent; cursor: pointer; transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .chip.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(108, 142, 245, 0.35); font-weight: 600; }
+
+    .info-note {
+      background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+      border-radius: var(--rs); padding: 11px 14px; font-size: 12.5px; color: var(--muted);
+      display: flex; gap: 8px; align-items: flex-start; line-height: 1.5;
+    }
+
+    /* ── Modals ────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.68); z-index: 400;
+      display: flex; align-items: flex-end; justify-content: center;
+      backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity 0.22s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--card); border: 1px solid var(--border-strong);
+      border-radius: var(--r) var(--r) 0 0; width: 100%; max-width: 520px;
+      max-height: 92dvh; overflow-y: auto; padding: 22px;
+      transform: translateY(100%); transition: transform 0.28s var(--ease);
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    @media (min-width: 640px) {
+      .modal-overlay { align-items: center; padding: 20px; }
+      .modal { border-radius: var(--r); transform: scale(0.96); }
+      .modal-overlay.open .modal { transform: scale(1); }
+    }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .modal-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+
+    /* ── Dashboard ─────────────────────────────────────────────── */
+    .period-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .period-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .period-nav { display: flex; align-items: center; gap: 6px; }
+    .period-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 36px; padding: 6px 12px; border-radius: var(--rs);
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    }
+    .period-btn:hover, .period-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; min-width: 0; }
+    .stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .stat-value { font-size: clamp(17px, 2.3vw, 23px); font-weight: 700; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stat-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    .budget-hero { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin: 16px 0; }
+    .dash-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+
+    .tx-row {
+      display: flex; align-items: center; gap: 12px; padding: 10px 4px;
+      border-bottom: 1px solid var(--border); cursor: pointer; border-radius: 6px;
+    }
+    .tx-row:hover { background: rgba(255, 255, 255, 0.03); }
+    .tx-row:last-child { border-bottom: none; }
+    .tx-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0;
+    }
+    .tx-info { flex: 1; min-width: 0; }
+    .tx-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tx-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tx-amount { font-size: 14px; font-weight: 700; flex-shrink: 0; text-align: right; }
+    .tx-amount.income { color: var(--ok); }
+    .tx-amount.expense { color: var(--danger); }
+    .cat-row { margin-bottom: 14px; }
+    .cat-row:last-child { margin-bottom: 0; }
+
+    .section-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .section-link { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; border: none; background: none; padding: 4px; }
+    .section-link:hover { text-decoration: underline; }
+
+    /* ── Transactions ──────────────────────────────────────────── */
+    .tx-toolbar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .search-bar {
+      display: flex; gap: 8px; align-items: center;
+      background: var(--card); border: 1px solid var(--border-strong);
+      border-radius: var(--rs); padding: 4px 10px; min-height: 44px;
+    }
+    .search-bar input { background: transparent; border: none; outline: none; color: var(--text); font-size: 15px; flex: 1; min-width: 0; }
+    .search-bar input::placeholder { color: var(--muted); }
+    .filter-controls {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px; align-items: end;
+    }
+    .filter-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; align-items: center; }
+    .filter-row::-webkit-scrollbar { display: none; }
+
+    .tx-list-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rs); margin-bottom: 8px; cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .tx-list-item:hover { border-color: rgba(108, 142, 245, 0.35); }
+    .tx-list-item.needs-review { border-color: rgba(245, 166, 35, 0.4); }
+    .tx-right { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+    .tx-actions { display: flex; gap: 4px; }
+
+    /* ── Reports ───────────────────────────────────────────────── */
+    .bar-wrap { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 8px; }
+    .bar-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .bar-pair { display: flex; gap: 2px; align-items: flex-end; width: 100%; height: 118px; }
+    .bar { width: 100%; border-radius: 4px 4px 0 0; background: var(--accent); transition: height 0.45s var(--ease); min-height: 2px; }
+    .bar.income-bar { background: var(--ok); }
+    .bar-label { font-size: 10px; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .pie-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .pie-legend { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+    .pie-legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .pie-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+    .rpt-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; }
+
+    /* ── Settings ──────────────────────────────────────────────── */
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 14px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-size: 14px; font-weight: 600; }
+    .setting-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+    .switch { position: relative; display: inline-block; width: 48px; height: 28px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch-track {
+      position: absolute; inset: 0; background: rgba(255, 255, 255, 0.14);
+      border-radius: 99px; transition: background 0.2s; cursor: pointer;
+    }
+    .switch-track::before {
+      content: ''; position: absolute; width: 22px; height: 22px; border-radius: 50%;
+      background: var(--muted); top: 3px; left: 3px;
+      transition: transform 0.2s var(--ease), background 0.2s;
+    }
+    input:checked ~ .switch-track { background: var(--accent-dim); }
+    input:checked ~ .switch-track::before { transform: translateX(20px); background: var(--accent); }
+    input:focus-visible ~ .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ── Type switch & Amount ──────────────────────────────────── */
+    .type-switch { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border-strong); border-radius: var(--rs); overflow: hidden; }
+    .type-btn {
+      min-height: 44px; padding: 10px; text-align: center; font-size: 14px; font-weight: 600;
+      cursor: pointer; border: none; background: transparent; color: var(--muted); transition: all 0.15s;
+    }
+    .type-btn.expense.active { background: var(--danger-bg); color: var(--danger); }
+    .type-btn.income.active { background: var(--ok-bg); color: var(--ok); }
+    .amount-wrap { position: relative; }
+    .amount-currency { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; font-weight: 700; pointer-events: none; }
+    .amount-input { padding-left: 32px !important; }
+
+    /* ── Empty State & Sync Indicator ──────────────────────────── */
+    .empty-state { text-align: center; padding: 36px 16px; }
+    .empty-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.7; }
+    .empty-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .empty-sub { font-size: 14px; color: var(--muted); margin-bottom: 14px; }
+
+    .screen { display: none; }
+    .screen.active { display: block; animation: fadeUp 0.25s var(--ease); }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .sync-badge {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted);
+      padding: 5px 10px; border-radius: 99px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .sync-badge:hover { color: var(--text); border-color: var(--border-strong); }
+    .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+    .sync-dot.syncing { background: var(--accent); animation: spin 0.8s linear infinite; }
+    .sync-dot.error { background: var(--danger); }
+
+    /* ── Review Item Row ───────────────────────────────────────── */
+    .review-row {
+      padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--rs);
+      background: rgba(255, 255, 255, 0.03); display: flex; flex-direction: column; gap: 8px;
+    }
+
+    /* ── Responsive Breakpoints ────────────────────────────────── */
+    @media (max-width: 960px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .dash-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #main { margin-left: 0; padding-bottom: 72px; }
+      #bottom-nav { display: flex; }
+      #topbar { padding: 12px 16px; }
+      #content { padding: 16px; }
+      #topbar-add-desk { display: none; }
+      #mobile-account-pill { display: inline-flex; }
+      .rpt-summary-grid { grid-template-columns: 1fr; text-align: left !important; }
+      .tx-actions { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Global Loader ─────────────────────────────────────────────────── -->
+<div id="global-loader" role="status" aria-live="polite">
+  <div class="logo-icon" style="width:48px;height:48px;font-size:24px;border-radius:14px;">₹</div>
+  <div class="spinner" aria-hidden="true"></div>
+  <div style="font-size:13px;color:var(--muted);">Loading SpendWise…</div>
+</div>
+
+<!-- ── Toast Notifications ───────────────────────────────────────────── -->
+<div id="toasts" aria-live="polite"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     AUTH SCREEN
+════════════════════════════════════════════════════════════════════════ -->
+<div id="auth-screen" class="full-screen-center">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="logo-icon">₹</div>
+      <div>
+        <div style="font-size:22px;font-weight:800;letter-spacing:-0.025em;line-height:1.1;">SpendWise</div>
+        <div style="font-size:12px;color:var(--muted);">Track Indian rupee (₹) spending across devices</div>
+      </div>
+    </div>
+
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab active" id="tab-login" role="tab" aria-selected="true" data-auth-tab="login">Log in</button>
+      <button type="button" class="auth-tab" id="tab-register" role="tab" aria-selected="false" data-auth-tab="register">Create account</button>
+    </div>
+
+    <!-- Login Panel -->
+    <div class="auth-panel active" id="panel-login" role="tabpanel">
+      <form id="login-form" novalidate>
+        <div class="field-group" style="margin-bottom:14px;">
+          <label class="field-label" for="login-uid">User ID</label>
+          <input class="field-input" type="text" id="login-uid" placeholder="Enter your user ID" autocomplete="username" autocapitalize="off" spellcheck="false" required/>
+        </div>
+        <div class="field-group" style="margin-bottom:16px;">
+          <label class="field-label" for="login-pw">Password</label>
+          <div class="pw-wrap">
+            <input class="field-input" type="password" id="login-pw" placeholder="Enter your password" autocomplete="current-password" required/>
+            <button type="button" class="pw-toggle" data-pw-target="login-pw" aria-label="Show password">Show</button>
+          </div>
+        </div>
+        <div class="err-msg" id="login-err" style="margin-bottom:14px;" role="alert"></div>
+        <button type="submit" class="btn btn-primary" id="login-btn" style="width:100%;">Log in</button>
+      </form>
+    </div>
+
+    <!-- Register Panel -->
+    <div class="auth-panel" id="panel-register" role="tabpanel">
+      <form id="register-form" novalidate>
+        <div class="field-group" style="margin-bottom:14px;">
+          <label class="field-label" for="reg-uid">Choose a user ID</label>
+          <input class="field-input" type="text" id="reg-uid" placeholder="e.g. aarav_finances" autocomplete="username" autocapitalize="off" spellcheck="false" minlength="3" maxlength="30" required/>
+          <div class="field-hint" id="reg-uid-hint">3–30 characters: English letters, numbers, and underscores only.</div>
+        </div>
+        <div class="field-group" style="margin-bottom:16px;">
+          <label class="field-label" for="reg-pw">Password</label>
+          <div class="pw-wrap">
+            <input class="field-input" type="password" id="reg-pw" placeholder="Create a password" autocomplete="new-password" minlength="8" maxlength="72" required/>
+            <button type="button" class="pw-toggle" data-pw-target="reg-pw" aria-label="Show password">Show</button>
+          </div>
+          <div class="field-hint" id="reg-pw-hint">
+            Rule: <strong>At least 8 characters (8–72), English letters (A–Z, a–z) and numbers (0–9) only.</strong> No spaces or special characters.
+          </div>
+        </div>
+        <div class="err-msg" id="reg-err" style="margin-bottom:14px;" role="alert"></div>
+        <button type="submit" class="btn btn-primary" id="register-btn" style="width:100%;">Create account →</button>
+      </form>
+    </div>
+
+    <div class="info-note" style="margin-top:16px;">
+      <span>🔒</span>
+      <span>Your rupee budgets and transactions are saved in the server's SQL database and synced when you sign in. Passwords are encrypted with one-way hashing and never stored in plain text or browser storage.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     FIRST-TIME SETUP WIZARD (4 Steps — INR only)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="setup-screen" class="full-screen-center">
+  <div class="setup-box">
+    <div class="auth-logo" style="margin-bottom:16px;">
+      <div class="logo-icon">₹</div>
+      <div>
+        <div style="font-size:19px;font-weight:800;letter-spacing:-0.025em;line-height:1.1;">Quick Setup</div>
+        <div style="font-size:12px;color:var(--muted);" id="setup-step-label">Step 1 of 4</div>
+      </div>
+    </div>
+    <div class="step-dots" id="step-dots" aria-hidden="true"></div>
+
+    <!-- Step 1: Spending limit & period (INR) -->
+    <div class="setup-step active" id="setup-1">
+      <div class="setup-title">Set your rupee spending limit</div>
+      <div class="setup-sub">All amounts in SpendWise are tracked in Indian rupees (₹) to the nearest paise.</div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="field-group">
+          <label class="field-label">Quick pick (₹)</label>
+          <div class="toggle-group" id="s-limit-presets">
+            <button type="button" class="toggle-btn" data-limit="2000">₹2,000</button>
+            <button type="button" class="toggle-btn" data-limit="5000">₹5,000</button>
+            <button type="button" class="toggle-btn active" data-limit="10000">₹10,000</button>
+            <button type="button" class="toggle-btn" data-limit="25000">₹25,000</button>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="s-limit">Spending limit (₹)</label>
+          <div class="amount-wrap">
+            <span class="amount-currency">₹</span>
+            <input class="field-input amount-input" type="number" id="s-limit" value="10000" min="1" step="0.01" placeholder="10000.00" inputmode="decimal"/>
+          </div>
+          <div class="field-hint">Enter rupees and optional paise (e.g. 10000 or 12500.50).</div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Budget period</label>
+          <div class="toggle-group" id="s-period-grp">
+            <button type="button" class="toggle-btn" data-val="weekly">Weekly</button>
+            <button type="button" class="toggle-btn active" data-val="monthly">Monthly</button>
+            <button type="button" class="toggle-btn" data-val="yearly">Yearly</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Alert threshold -->
+    <div class="setup-step" id="setup-2">
+      <div class="setup-title">When should we alert you?</div>
+      <div class="setup-sub">Get an early heads-up before you go over your rupee limit.</div>
+      <div class="field-group">
+        <label class="field-label">Alert me when spending reaches</label>
+        <div class="toggle-group" id="s-thresh-grp">
+          <button type="button" class="toggle-btn active" data-val="80">80%</button>
+          <button type="button" class="toggle-btn" data-val="90">90%</button>
+          <button type="button" class="toggle-btn" data-val="100">100%</button>
+          <button type="button" class="toggle-btn" data-val="custom">Custom…</button>
+        </div>
+      </div>
+      <div id="s-custom-wrap" style="display:none;margin-top:14px;">
+        <div class="field-group">
+          <label class="field-label" for="s-custom-pct">Custom percentage (1–200)</label>
+          <input class="field-input" type="number" id="s-custom-pct" min="1" max="200" placeholder="75" inputmode="numeric"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Notification preferences -->
+    <div class="setup-step" id="setup-3">
+      <div class="setup-title">How do you want alerts?</div>
+      <div class="setup-sub">Choose in-app alerts, browser notifications, or both.</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <label style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border-strong);border-radius:var(--rs);cursor:pointer;">
+          <input type="checkbox" id="s-inapp" checked style="width:20px;height:20px;accent-color:var(--accent);flex-shrink:0;"/>
+          <span>
+            <span style="display:block;font-weight:600;font-size:14px;">In-app alerts</span>
+            <span style="font-size:12px;color:var(--muted);">Shown inside SpendWise whenever you approach or pass your limit.</span>
+          </span>
+        </label>
+        <label style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border-strong);border-radius:var(--rs);cursor:pointer;">
+          <input type="checkbox" id="s-browser" style="width:20px;height:20px;accent-color:var(--accent);flex-shrink:0;"/>
+          <span>
+            <span style="display:block;font-weight:600;font-size:14px;">Browser notifications</span>
+            <span style="font-size:12px;color:var(--muted);">Requires browser notification permission. If unavailable or denied, in-app alerts still work.</span>
+          </span>
+        </label>
+        <div id="s-browser-status" class="field-hint"></div>
+      </div>
+    </div>
+
+    <!-- Step 4: Starting balance & optional categories -->
+    <div class="setup-step" id="setup-4">
+      <div class="setup-title">Starting balance &amp; categories</div>
+      <div class="setup-sub">Optional — add your opening rupee balance or extra categories now, or skip and edit later in Settings.</div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="field-group">
+          <label class="field-label" for="s-balance">Starting balance in ₹ <span style="font-weight:400;">(optional)</span></label>
+          <div class="amount-wrap">
+            <span class="amount-currency">₹</span>
+            <input class="field-input amount-input" type="number" id="s-balance" step="0.01" placeholder="0.00" inputmode="decimal"/>
+          </div>
+          <div class="field-hint">Example: 25000.00 or 125000.50 (up to 2 decimal places for paise).</div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="s-new-cat">Add custom spending category <span style="font-weight:400;">(optional)</span></label>
+          <div style="display:flex;gap:8px;">
+            <input class="field-input" type="text" id="s-new-cat" placeholder="e.g. Sabzi, Auto, Chai" maxlength="50" style="flex:1;"/>
+            <button class="btn btn-ghost" type="button" id="s-add-cat-btn">Add</button>
+          </div>
+          <div id="s-cats-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div>
+          <div class="field-hint">Common categories (Food &amp; Dining, Groceries, Transport, Bills &amp; Utilities, etc.) are already included.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="err-msg" id="setup-err" style="margin-top:14px;" role="alert"></div>
+
+    <div class="setup-nav">
+      <button type="button" class="btn btn-ghost" id="s-back" style="visibility:hidden;">← Back</button>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-ghost" id="s-skip" style="display:none;">Skip</button>
+        <button type="button" class="btn btn-primary" id="s-next">Continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     IMPORT LOCAL DATA MODAL
+════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <span class="modal-title" id="import-modal-title">Import saved local data?</span>
+      <button type="button" class="btn-icon btn" data-skip-import="true" aria-label="Close">✕</button>
+    </div>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:12px;line-height:1.6;">
+      We found existing SpendWise data stored locally on this device:
+    </p>
+    <ul id="import-summary-list" style="font-size:13.5px;color:var(--text);margin:0 0 14px 18px;line-height:1.8;"></ul>
+    <div id="import-foreign-warn" class="info-note" style="display:none;margin-bottom:12px;border-color:rgba(245,166,35,0.4);color:var(--warn);">
+      <span>⚠️</span>
+      <span id="import-foreign-warn-text"></span>
+    </div>
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:14px;cursor:pointer;font-size:13px;">
+      <input type="checkbox" id="import-include-settings" checked style="width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;"/>
+      <span>Also import my saved budget limit and alert preferences</span>
+    </label>
+    <div class="info-note" style="margin-bottom:16px;">
+      <span>ℹ️</span>
+      <span>Records are saved to your account's SQL database. Duplicate imports are prevented automatically.</span>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button type="button" class="btn btn-primary" id="import-btn" style="flex:1;">Import to account</button>
+      <button type="button" class="btn btn-ghost" data-skip-import="true">Skip</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     DELIBERATE NON-INR REVIEW MODAL
+════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-header">
+      <span class="modal-title" id="review-modal-title">Review records in Indian rupees (₹)</span>
+      <button type="button" class="btn-icon btn" data-close-modal="review-modal" aria-label="Close">✕</button>
+    </div>
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px;line-height:1.6;">
+      SpendWise now uses Indian rupees (INR) only. The records below were previously saved in another currency, so their original values were preserved instead of being silently relabeled as rupees. Confirm or update their rupee (₹) values to include them in your totals.
+    </p>
+    <div id="review-items-wrap" style="display:flex;flex-direction:column;gap:12px;"></div>
+    <div class="err-msg" id="review-err" style="margin-top:12px;"></div>
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button type="button" class="btn btn-ghost" style="flex:1;" data-close-modal="review-modal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════════════════════════════════ -->
+<div id="app">
+  <!-- Desktop Sidebar -->
+  <nav id="sidebar" aria-label="Main navigation">
+    <div class="sidebar-logo">
+      <div class="logo-icon">₹</div>
+      <span class="logo-text">SpendWise</span>
+    </div>
+    <div class="user-chip">
+      <span id="sidebar-user">Signed in</span>
+      <button type="button" class="btn btn-ghost btn-sm js-logout-btn" style="min-height:28px;padding:3px 8px;font-size:11px;">Log out</button>
+    </div>
+    <div class="nav-list" role="list">
+      <button type="button" class="nav-item active" data-screen="dashboard">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </button>
+      <button type="button" class="nav-item" data-screen="transactions">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 3h12M6 8h12M6 13l8.5 8M6 13h3a4 4 0 0 0 0-8"/></svg>
+        Transactions
+      </button>
+      <button type="button" class="nav-item" data-screen="budgets">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        Budgets
+      </button>
+      <button type="button" class="nav-item" data-screen="reports">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        Reports
+      </button>
+      <button type="button" class="nav-item" data-screen="settings">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        Settings
+      </button>
+    </div>
+    <div class="sidebar-footer">
+      <button type="button" class="btn btn-primary js-open-add-tx" style="width:100%;">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Add transaction
+      </button>
+    </div>
+  </nav>
+
+  <main id="main">
+    <header id="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-right">
+        <button type="button" class="sync-badge" id="sync-btn" title="Refresh from server">
+          <span class="sync-dot" id="sync-dot"></span>
+          <span id="sync-label">Synced</span>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm js-logout-btn" id="mobile-account-pill" title="Log out">Log out</button>
+        <button type="button" class="btn btn-primary btn-sm js-open-add-tx" id="topbar-add-desk">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Add transaction
+        </button>
+      </div>
+    </header>
+
+    <div id="content">
+      <!-- Non-INR Legacy Review Banner (if any unreviewed records exist) -->
+      <div id="review-banner" role="region" aria-label="Currency migration review"></div>
+
+      <!-- Non-blocking Overspending Alert Banner -->
+      <div id="alert-banner" role="region" aria-label="Budget alerts" aria-live="polite"></div>
+
+      <!-- ── DASHBOARD ─────────────────────────────────────────── -->
+      <section class="screen active" id="screen-dashboard" aria-label="Dashboard">
+        <div class="period-bar">
+          <div class="period-pills">
+            <button type="button" class="period-btn active" data-vp="weekly">Weekly</button>
+            <button type="button" class="period-btn" data-vp="monthly">Monthly</button>
+            <button type="button" class="period-btn" data-vp="yearly">Yearly</button>
+          </div>
+          <div class="period-nav">
+            <button type="button" class="period-btn" data-dash-offset="-1" aria-label="Previous period">‹</button>
+            <button type="button" class="period-btn" data-dash-offset="0" id="period-label" title="Jump to current period">Current</button>
+            <button type="button" class="period-btn" data-dash-offset="1" aria-label="Next period">›</button>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Current balance</div>
+            <div class="stat-value num" id="d-balance">—</div>
+            <div class="stat-sub">All-time net (INR)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total income</div>
+            <div class="stat-value num" style="color:var(--ok);" id="d-income">—</div>
+            <div class="stat-sub" id="d-income-sub">This period</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total expenses</div>
+            <div class="stat-value num" style="color:var(--danger);" id="d-expenses">—</div>
+            <div class="stat-sub" id="d-expenses-sub">This period</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label" id="d-rem-title">Remaining budget</div>
+            <div class="stat-value num" id="d-remaining">—</div>
+            <div class="stat-sub" id="d-rem-sub">Limit comparison</div>
+          </div>
+        </div>
+
+        <div class="budget-hero">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:20px;font-weight:700;" id="d-status-text">On track</div>
+              <div style="font-size:13px;color:var(--muted);margin-top:3px;" id="d-status-meta"></div>
+            </div>
+            <div id="d-status-badge"></div>
+          </div>
+          <div class="progress-wrap" style="height:12px;" role="progressbar" aria-label="Budget progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="d-progress-wrap">
+            <div class="progress-bar" id="d-progress" style="width:0%;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:12.5px;color:var(--muted);flex-wrap:wrap;">
+            <span id="d-spent-lbl">Spent: —</span>
+            <span id="d-limit-lbl">Limit: —</span>
+          </div>
+        </div>
+
+        <div class="dash-row">
+          <div class="card">
+            <div class="section-title">
+              Recent transactions
+              <button type="button" class="section-link" data-nav-screen="transactions">View all →</button>
+            </div>
+            <div id="d-recent"></div>
+          </div>
+          <div class="card">
+            <div class="section-title">
+              Spending by category
+              <button type="button" class="section-link" data-nav-screen="budgets">Budgets →</button>
+            </div>
+            <div id="d-cats"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── TRANSACTIONS ──────────────────────────────────────── -->
+      <section class="screen" id="screen-transactions" aria-label="Transactions">
+        <div class="tx-toolbar">
+          <div class="search-bar">
+            <svg width="16" height="16" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="tx-search" placeholder="Search note, category, or ₹ amount…"/>
+            <button type="button" class="btn btn-icon" id="tx-search-clear" aria-label="Clear search">✕</button>
+          </div>
+
+          <div class="filter-row" role="group" aria-label="Filter by transaction type">
+            <button type="button" class="chip active" data-f="all">All types</button>
+            <button type="button" class="chip" data-f="expense">Expenses</button>
+            <button type="button" class="chip" data-f="income">Income</button>
+            <button type="button" class="btn btn-primary btn-sm js-open-add-tx" style="margin-left:auto;">+ Add transaction</button>
+          </div>
+
+          <div class="filter-controls">
+            <div class="field-group">
+              <label class="field-label" for="tx-filter-cat">Category</label>
+              <select class="field-input" id="tx-filter-cat">
+                <option value="all">All categories</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="tx-filter-from">From date</label>
+              <input class="field-input" type="date" id="tx-filter-from"/>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="tx-filter-to">To date</label>
+              <input class="field-input" type="date" id="tx-filter-to"/>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="tx-sort">Sort by</label>
+              <select class="field-input" id="tx-sort">
+                <option value="date:desc">Newest first</option>
+                <option value="date:asc">Oldest first</option>
+                <option value="amount:desc">Highest ₹ amount</option>
+                <option value="amount:asc">Lowest ₹ amount</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:12.5px;color:var(--muted);" id="tx-count-label"></span>
+            <button type="button" class="btn btn-ghost btn-sm" id="tx-clear-filters" style="display:none;">Clear filters</button>
+          </div>
+        </div>
+
+        <div id="tx-list"></div>
+      </section>
+
+      <!-- ── BUDGETS ───────────────────────────────────────────── -->
+      <section class="screen" id="screen-budgets" aria-label="Budgets">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title" id="b-period-title">Overall Budget (INR)</div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;" class="num" id="b-spent-big">—</div>
+              <div style="font-size:13px;color:var(--muted);">spent of <span id="b-limit-lbl">—</span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div id="b-badge"></div>
+              <button type="button" class="btn btn-ghost btn-sm" data-nav-screen="settings">Edit limit</button>
+            </div>
+          </div>
+          <div class="progress-wrap" style="height:14px;">
+            <div class="progress-bar" id="b-overall-bar" style="width:0%;"></div>
+          </div>
+          <div style="font-size:13px;color:var(--muted);margin-top:10px;" id="b-remaining"></div>
+        </div>
+
+        <div class="section-title" style="margin-top:20px;">
+          Category budgets (₹)
+          <button type="button" class="btn btn-ghost btn-sm" id="b-set-cat-limits-btn">Set category limits</button>
+        </div>
+        <div id="b-cat-list"></div>
+      </section>
+
+      <!-- ── REPORTS ───────────────────────────────────────────── -->
+      <section class="screen" id="screen-reports" aria-label="Reports">
+        <div class="period-bar">
+          <div class="period-pills">
+            <button type="button" class="period-btn active" data-rp="weekly">Weekly</button>
+            <button type="button" class="period-btn" data-rp="monthly">Monthly</button>
+            <button type="button" class="period-btn" data-rp="yearly">Yearly</button>
+          </div>
+          <div class="period-nav">
+            <button type="button" class="period-btn" data-rpt-offset="-1" aria-label="Previous period">‹</button>
+            <button type="button" class="period-btn" data-rpt-offset="0" id="rpt-period-label">Current</button>
+            <button type="button" class="period-btn" data-rpt-offset="1" aria-label="Next period">›</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Period summary (INR)</div>
+          <div id="rpt-summary" class="rpt-summary-grid"></div>
+        </div>
+
+        <div class="dash-row">
+          <div class="card">
+            <div class="card-title">Expenses by category (₹)</div>
+            <div class="pie-wrap" style="margin-top:12px;">
+              <canvas id="pie-canvas" aria-label="Expenses by category chart"></canvas>
+              <div class="pie-legend" id="pie-legend"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+              <div class="card-title" id="bar-label" style="margin-bottom:0;">Spending over time (₹)</div>
+              <div style="display:flex;gap:12px;font-size:11px;color:var(--muted);">
+                <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--accent);margin-right:4px;"></span>Expenses</span>
+                <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--ok);margin-right:4px;"></span>Income</span>
+              </div>
+            </div>
+            <div class="bar-wrap" id="bar-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── SETTINGS ──────────────────────────────────────────── -->
+      <section class="screen" id="screen-settings" aria-label="Settings">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Budget &amp; rupee preferences</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Currency</div>
+              <div class="setting-sub">Indian rupees (₹ / INR) only, calculated to the nearest paise</div>
+            </div>
+            <span class="badge badge-info">₹ INR</span>
+          </div>
+          <div class="setting-row">
+            <div>
+              <label class="setting-label" for="set-period">Budget period</label>
+              <div class="setting-sub">Time window tracked against your rupee limit</div>
+            </div>
+            <select class="field-input" id="set-period" style="width:auto;min-width:140px;max-width:190px;">
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div>
+              <label class="setting-label" for="set-limit">Spending limit (₹)</label>
+              <div class="setting-sub" id="set-limit-sub"></div>
+            </div>
+            <input class="field-input" type="number" id="set-limit" min="1" step="0.01" style="width:150px;"/>
+          </div>
+          <div class="setting-row">
+            <div>
+              <label class="setting-label" for="set-balance">Starting balance (₹)</label>
+              <div class="setting-sub">Opening balance in rupees and paise</div>
+            </div>
+            <input class="field-input" type="number" id="set-balance" step="0.01" style="width:150px;"/>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Overspending alerts</div>
+          <div class="setting-row">
+            <div>
+              <label class="setting-label" for="set-threshold">Alert threshold (%)</label>
+              <div class="setting-sub">Warn when spending reaches this % of your limit</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input class="field-input" type="number" id="set-threshold" min="1" max="200" style="width:90px;"/>
+              <span style="color:var(--muted);">%</span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">In-app alerts</div>
+              <div class="setting-sub">Non-blocking alert banner inside SpendWise</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="set-inapp" aria-label="In-app alerts"/>
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div style="flex:1;min-width:200px;">
+              <div class="setting-label">Browser notifications</div>
+              <div class="setting-sub" id="set-notif-sub">Requires browser permission</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="set-browser" aria-label="Browser notifications"/>
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">Spending categories</div>
+          <div id="set-cats-list"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <input class="field-input" type="text" id="set-new-cat" placeholder="Add new category" maxlength="50" style="flex:1;"/>
+            <button type="button" class="btn btn-ghost" id="set-add-cat-btn">Add</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Account, privacy &amp; data</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Signed in account</div>
+              <div class="setting-sub" id="set-user-id">—</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm js-logout-btn">Log out</button>
+          </div>
+          <div class="setting-row" id="set-review-row" style="display:none;">
+            <div>
+              <div class="setting-label">Non-INR records awaiting review</div>
+              <div class="setting-sub" id="set-review-sub">Review old records before treating them as rupees</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="set-review-btn">Review</button>
+          </div>
+          <div class="setting-row" id="set-import-row" style="display:none;">
+            <div>
+              <div class="setting-label">Local browser data found</div>
+              <div class="setting-sub">Import saved transactions from before you created an account</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="set-import-btn">Import data</button>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Export transactions</div>
+              <div class="setting-sub">Download your synced INR transactions as a CSV file</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="set-export-btn">Export CSV</button>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Delete account</div>
+              <div class="setting-sub">Permanently delete your account, settings, and transactions</div>
+            </div>
+            <button type="button" class="btn btn-danger btn-sm" id="set-del-acc-btn">Delete account</button>
+          </div>
+          <div class="info-note" style="margin-top:12px;">
+            <span>🔒</span>
+            <span><strong>Where your data lives:</strong> Your transactions, categories, and rupee budgets are stored in this app's SQL database server in exact paise integers and synced whenever you sign in. We do not connect to bank accounts or collect banking credentials. Browser storage is never used to store passwords or session tokens.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Mobile Bottom Navigation -->
+  <nav id="bottom-nav" aria-label="Mobile navigation">
+    <button type="button" class="bnav-item active" data-screen="dashboard">
+      <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+      Home
+    </button>
+    <button type="button" class="bnav-item" data-screen="transactions">
+      <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 3h12M6 8h12M6 13l8.5 8M6 13h3a4 4 0 0 0 0-8"/></svg>
+      Activity
+    </button>
+    <button type="button" class="bnav-add js-open-add-tx" aria-label="Add transaction" title="Add transaction">+</button>
+    <button type="button" class="bnav-item" data-screen="budgets">
+      <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      Budgets
+    </button>
+    <button type="button" class="bnav-item" data-screen="reports">
+      <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      Reports
+    </button>
+    <button type="button" class="bnav-item" data-screen="settings">
+      <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      Settings
+    </button>
+  </nav>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════════════════════════ -->
+<!-- Add / Edit Transaction (INR only) -->
+<div class="modal-overlay" id="tx-modal" role="dialog" aria-modal="true" aria-labelledby="tx-modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="tx-modal-title">Add transaction</span>
+      <button type="button" class="btn-icon btn" data-close-modal="tx-modal" aria-label="Close">✕</button>
+    </div>
+    <form id="tx-form" novalidate>
+      <div id="tx-review-notice" class="info-note" style="display:none;margin-bottom:14px;border-color:rgba(245,166,35,0.4);color:var(--warn);"></div>
+
+      <div class="field-group" style="margin-bottom:14px;">
+        <div class="type-switch" role="group" aria-label="Transaction type">
+          <button type="button" class="type-btn expense active" id="type-expense">Expense</button>
+          <button type="button" class="type-btn income" id="type-income">Income</button>
+        </div>
+      </div>
+
+      <div class="field-group" style="margin-bottom:14px;">
+        <label class="field-label" for="tx-amount">Amount in Indian rupees (₹)</label>
+        <div class="amount-wrap">
+          <span class="amount-currency">₹</span>
+          <input class="field-input amount-input" type="number" id="tx-amount" step="0.01" min="0.01" placeholder="0.00" required inputmode="decimal"/>
+        </div>
+        <div class="field-hint">Enter rupees and optional paise (e.g. 250.50 or 12500.00).</div>
+      </div>
+      <div class="err-msg" id="tx-amount-err" style="margin-bottom:12px;"></div>
+
+      <div class="field-group" style="margin-bottom:14px;">
+        <label class="field-label" for="tx-category">Category</label>
+        <select class="field-input" id="tx-category"></select>
+      </div>
+
+      <div class="field-group" style="margin-bottom:14px;">
+        <label class="field-label" for="tx-date">Date</label>
+        <input class="field-input" type="date" id="tx-date" required/>
+      </div>
+
+      <div class="field-group" style="margin-bottom:18px;">
+        <label class="field-label" for="tx-note">Note or description <span style="font-weight:400;">(optional)</span></label>
+        <input class="field-input" type="text" id="tx-note" placeholder="e.g. Sabzi mandi, Metro pass, Chai" maxlength="120"/>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary" id="tx-save-btn" style="flex:1;">Save transaction</button>
+        <button type="button" class="btn btn-danger" id="tx-modal-del-btn" style="display:none;">Delete</button>
+        <button type="button" class="btn btn-ghost" data-close-modal="tx-modal">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Transaction Confirmation -->
+<div class="modal-overlay" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <span class="modal-title" id="delete-modal-title">Delete transaction</span>
+      <button type="button" class="btn-icon btn" data-close-modal="delete-modal" aria-label="Close">✕</button>
+    </div>
+    <p style="color:var(--muted);font-size:14px;">This will permanently remove this transaction from your account.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+      <button type="button" class="btn btn-ghost" data-close-modal="delete-modal">Cancel</button>
+      <button type="button" class="btn btn-danger" id="del-confirm-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Category Budgets Modal -->
+<div class="modal-overlay" id="catbudget-modal" role="dialog" aria-modal="true" aria-labelledby="catbudget-modal-title">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header">
+      <span class="modal-title" id="catbudget-modal-title">Category budgets (₹ INR)</span>
+      <button type="button" class="btn-icon btn" data-close-modal="catbudget-modal" aria-label="Close">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Set spending limits in rupees and paise. Leave blank to remove a category limit.</p>
+    <div id="catb-items" style="display:flex;flex-direction:column;gap:12px;"></div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button type="button" class="btn btn-primary" id="catb-save-btn" style="flex:1;">Save limits</button>
+      <button type="button" class="btn btn-ghost" data-close-modal="catbudget-modal">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div class="modal-overlay" id="reset-modal" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <span class="modal-title" id="reset-modal-title">Delete account</span>
+      <button type="button" class="btn-icon btn" data-close-modal="reset-modal" aria-label="Close">✕</button>
+    </div>
+    <p style="color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:14px;">
+      This permanently deletes your user account, rupee budget settings, categories, and all transactions from the database.
+    </p>
+    <div class="field-group" style="margin-bottom:14px;">
+      <label class="field-label" for="del-acc-pw">Confirm with your password</label>
+      <input class="field-input" type="password" id="del-acc-pw" placeholder="Enter your password" autocomplete="current-password"/>
+    </div>
+    <div class="err-msg" id="del-acc-err" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn btn-ghost" data-close-modal="reset-modal">Cancel</button>
+      <button type="button" class="btn btn-danger" id="del-acc-btn">Delete permanently</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js" defer></script>
+</body>
+</html>
