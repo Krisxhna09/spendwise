@@ -596,8 +596,17 @@ function initDatabase(db) {
  * Create the configured Express application and SQLite connection.
  */
 function createApp(options = {}) {
-  const dataDir = options.dataDir || __dirname;
-  const dbPath = options.dbPath || path.join(dataDir, 'spendwise.db');
+  const dataDir = options.dataDir
+    || process.env.DATA_DIR
+    || process.env.RAILWAY_VOLUME_MOUNT_PATH
+    || __dirname;
+  const dbPath = options.dbPath
+    || process.env.DB_PATH
+    || path.join(dataDir, 'spendwise.db');
+  fs.mkdirSync(dataDir, { recursive: true });
+  if (dbPath !== ':memory:') {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  }
   const sessionSecret = options.sessionSecret || loadSessionSecret(dataDir);
 
   const db = new DatabaseSync(dbPath);
@@ -658,7 +667,8 @@ function createApp(options = {}) {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
 
-    if (enforceHttps && !https) {
+    const isHealthProbe = (req.method === 'GET' || req.method === 'HEAD') && req.path === '/health';
+    if (enforceHttps && !https && !isHealthProbe) {
       logEvent('warn', 'security.https_rejected', { method: req.method, path: req.path, ip: getClientIp(req) });
       if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api')) {
         const host = req.get('host') || '';
@@ -670,6 +680,17 @@ function createApp(options = {}) {
     }
 
     next();
+  });
+
+  // Liveness/readiness endpoint for PaaS health checks (before static fallback & rate limits)
+  app.get('/health', (_req, res) => {
+    try {
+      db.prepare('SELECT 1').get();
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ ok: true });
+    } catch {
+      res.status(503).json({ ok: false });
+    }
   });
 
   app.use(express.static(path.join(__dirname, 'public')));
@@ -1542,13 +1563,30 @@ function createApp(options = {}) {
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   const HOST = process.env.HOST;
-  const { app } = createApp();
+  const { app, db } = createApp();
   const onListen = () => {
     const shownHost = HOST || 'localhost';
     console.log(`\n✅  SpendWise (INR) running → http://${shownHost}:${PORT}\n`);
   };
-  if (HOST) app.listen(PORT, HOST, onListen);
-  else app.listen(PORT, onListen);
+  const server = HOST ? app.listen(PORT, HOST, onListen) : app.listen(PORT, onListen);
+
+  let shuttingDown = false;
+  const shutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Received ${signal}, shutting down gracefully...`);
+    const forceTimer = setTimeout(() => {
+      try { db.close(); } catch {}
+      process.exit(1);
+    }, 10_000);
+    if (typeof forceTimer.unref === 'function') forceTimer.unref();
+    server.close(() => {
+      try { db.close(); } catch {}
+      process.exit(0);
+    });
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = {

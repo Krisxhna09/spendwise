@@ -710,3 +710,57 @@ test('logout and account deletion enforce CSRF, password check, and cascade clea
   assert.equal((await meera.req('POST', '/api/auth/login', { userId: 'Meera03', password: 'MeeraPass99' })).status, 401);
   assert.equal(db.prepare('SELECT id FROM users WHERE user_id = ?').get('Meera03'), undefined);
 });
+
+test('health endpoint allows internal HTTP probes in production and respects DATA_DIR/RAILWAY_VOLUME_MOUNT_PATH/DB_PATH', async () => {
+  const volRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'spendwise-vol-'));
+  const railDir = path.join(volRoot, 'rail-data');
+  const customDb = path.join(volRoot, 'custom', 'nested', 'app.db');
+  const prevEnv = {
+    NODE_ENV: process.env.NODE_ENV,
+    DATA_DIR: process.env.DATA_DIR,
+    DB_PATH: process.env.DB_PATH,
+    RAILWAY_VOLUME_MOUNT_PATH: process.env.RAILWAY_VOLUME_MOUNT_PATH,
+  };
+
+  try {
+    process.env.NODE_ENV = 'production';
+    delete process.env.DATA_DIR;
+    delete process.env.DB_PATH;
+    process.env.RAILWAY_VOLUME_MOUNT_PATH = railDir;
+
+    const railCreated = createApp({ quiet: true, sessionSecret: 'rail-secret-key-at-least-32-characters-long' });
+    const railServer = http.createServer(railCreated.app);
+    await new Promise(resolve => railServer.listen(0, '127.0.0.1', resolve));
+    const railUrl = `http://127.0.0.1:${railServer.address().port}`;
+    try {
+      const healthGet = await fetch(railUrl + '/health');
+      assert.equal(healthGet.status, 200);
+      assert.deepEqual(await healthGet.json(), { ok: true });
+      assert.equal(healthGet.headers.get('cache-control'), 'no-store');
+
+      const healthPost = await fetch(railUrl + '/health', { method: 'POST' });
+      assert.equal(healthPost.status, 403);
+
+      const rootHttp = await fetch(railUrl + '/', { redirect: 'manual' });
+      assert.equal(rootHttp.status, 301);
+
+      assert.equal(fs.existsSync(path.join(railDir, 'spendwise.db')), true);
+    } finally {
+      await new Promise(resolve => railServer.close(resolve));
+      railCreated.db.close();
+    }
+
+    // DB_PATH takes precedence over DATA_DIR and creates nested parent dirs
+    process.env.DATA_DIR = path.join(volRoot, 'data-dir');
+    process.env.DB_PATH = customDb;
+    const dbCreated = createApp({ quiet: true, sessionSecret: 'db-secret-key-at-least-32-characters-long-1' });
+    dbCreated.db.close();
+    assert.equal(fs.existsSync(customDb), true);
+  } finally {
+    for (const [k, v] of Object.entries(prevEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(volRoot, { recursive: true, force: true });
+  }
+});

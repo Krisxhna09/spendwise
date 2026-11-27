@@ -1,0 +1,12 @@
+.git
+.gitignore
+.gitattributes
+node_modules
+*.db
+*.db-shm
+*.db-wal
+.session-secret
+.env
+.env.*
+!.env.example
+test
